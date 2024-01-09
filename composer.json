@@ -1,5 +1,5 @@
 {
-    "name": "stevenpaw/projectinfo-admin",
+    "name": "atwx/silverstripe-projectinfo",
     "description": "A skeleton for Silverstripe CMS modules.",
     "type": "silverstripe-vendormodule",
     "keywords": [
