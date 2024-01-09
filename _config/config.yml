@@ -1,1 +1,5 @@
 # see https://docs.silverstripe.org/en/developer_guides/configuration/configuration/
+
+Silverstripe\SiteConfig\SiteConfig:
+  extensions:
+    - Atwx\ProjectInfo\Extensions\ProjectInfoExtension
