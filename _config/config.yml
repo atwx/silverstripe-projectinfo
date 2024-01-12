@@ -3,3 +3,7 @@
 Silverstripe\SiteConfig\SiteConfig:
   extensions:
     - Atwx\ProjectInfo\Extensions\ProjectInfoExtension
+
+LeftAndMain:
+  extensions:
+    - LeftAndMainProjectInfoExtension
