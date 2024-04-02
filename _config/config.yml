@@ -4,6 +4,6 @@ Silverstripe\SiteConfig\SiteConfig:
   extensions:
     - Atwx\ProjectInfo\Extensions\ProjectInfoExtension
 
-LeftAndMain:
+SilverStripe\SiteConfig\SiteConfigLeftAndMain:
   extensions:
-    - LeftAndMainProjectInfoExtension
+    - Atwx\ProjectInfo\Extensions\LeftAndMainBackupExport

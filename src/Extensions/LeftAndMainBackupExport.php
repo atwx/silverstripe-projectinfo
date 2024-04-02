@@ -1,39 +1,55 @@
 <?php
 
+namespace Atwx\ProjectInfo\Extensions;
+
 use SilverStripe\Core\Environment;
 use SilverStripe\Admin\LeftAndMainExtension;
+use SilverStripe\ORM\DB;
 
 class LeftAndMainBackupExport extends LeftAndMainExtension
 {
+    private static $allowed_actions = array(
+        'doBackup'
+    );
 
-    public function doBackup($data, $form){
+    public function doBackup(){
         $host = Environment::getEnv('SS_DATABASE_SERVER');
         $user = Environment::getEnv('SS_DATABASE_USERNAME');
         $pass = Environment::getEnv('SS_DATABASE_PASSWORD');
         $name = Environment::getEnv('SS_DATABASE_NAME');
-        $this->Export_Database($host,$user,$pass,$name,"dump.sql");
+        \Spatie\DbDumper\Databases\MySql::create()
+        ->setHost($host)
+        ->setDbName($name)
+        ->setUserName($user)
+        ->setPassword($pass)
+        ->dumpToFile('dump.sql');
+//        $this->Export_Database($host,$user,$pass,$name,"dump.sql");
+//        $mysqldump=exec('which mysqldump');
+//        $command = "$mysqldump --opt -h $dbhost -u $dbuser -p $dbpass $dbname > $dbname.sql";
+//        exec($command);
     }
 
     public function Export_Database($host,$user,$pass,$name,$backup_name=false )
     {
-        echo "Test";
-        $mysqli = new mysqli($host,$user,$pass,$name);
-        $mysqli->select_db($name);
-        $mysqli->query("SET NAMES 'utf8'");
+//        $mysqli = new \mysqli($host,$user,$pass,$name);
+//        $mysqli->select_db($name);
+//        $mysqli->query("SET NAMES 'utf8'");
 
-        $queryTables    = $mysqli->query('SHOW TABLES');
-        while($row = $queryTables->fetch_row())
+        $queryTables    = DB::query('SHOW TABLES');
+        foreach($queryTables as $row)
         {
-            $target_tables[] = $row[0];
+            $target_tables[] = array_values($row)[0];
         }
-        $target_tables = array_intersect( $target_tables, false);
         foreach($target_tables as $table)
         {
             if ($table != "group"){
-                $result         =   $mysqli->query('SELECT * FROM '.$table.';');
-                $fields_amount  =   $result->field_count;
-                $rows_num=$mysqli->affected_rows;
-                $res            =   $mysqli->query('SHOW CREATE TABLE '.$table);
+                $result         =   DB::query('SELECT * FROM '.$table.';');
+//                print_r($result);die();
+//                $fields_amount  =   $result->field_count;
+//                print_r($result);die();
+//                $rows_num=$mysqli->affected_rows;
+                $res            =   DB::query('SHOW CREATE TABLE '.$table);
+                print_r($res->record());die();
                 $TableMLine     =   $res->fetch_row();
                 $content        = (!isset($content) ?  '' : $content) . "\n\n".$TableMLine[1].";\n\n";
 

@@ -9,6 +9,7 @@ use SilverStripe\Core\Environment;
 use SilverStripe\Forms\FormAction;
 use SilverStripe\ORM\DataExtension;
 use SilverStripe\Forms\LiteralField;
+use SilverStripe\Control\Controller;
 
 /**
  * Class \App\CustomSiteConfig
@@ -23,20 +24,15 @@ use SilverStripe\Forms\LiteralField;
  */
 class ProjectInfoExtension extends DataExtension
 {
-
-    private static $allowed_actions = array(
-        'doBackup'
-    );
-
-    private static $db = [
-    ];
-
     public function updateCMSFields(FieldList $fields)
     {
         $fields->addFieldToTab("Root.ProjectInfo", new LiteralField("ProjectInfo", "<h2>Project Info</h2>"));
         $fields->addFieldToTab("Root.ProjectInfo", new LiteralField("ProjectInfo", "<h3>Here is Info about this project:</h3>"));
         $fields->addFieldToTab("Root.ProjectInfo", new LiteralField("ProjectInfo", "<p>Database Name: <strong>" . $this->getDatabaseName() . "</strong></p>"), "Intro");
         $fields->addFieldToTab("Root.ProjectInfo", new FormAction('doBackup', 'Create a Database-Dump'));
+
+        $controller = Controller::curr();
+        $fields->addFieldToTab("Root.ProjectInfo", new LiteralField("ProjectInfo", "<p><a href='".$controller->Link('doBackup')."' target='_blank'>Create database dump</a></p>"));
     }
 
     public function getDatabaseName()
