@@ -29,7 +29,6 @@ class ProjectInfoExtension extends DataExtension
         $fields->addFieldToTab("Root.ProjectInfo", new LiteralField("ProjectInfo", "<h2>Project Info</h2>"));
         $fields->addFieldToTab("Root.ProjectInfo", new LiteralField("ProjectInfo", "<h3>Here is Info about this project:</h3>"));
         $fields->addFieldToTab("Root.ProjectInfo", new LiteralField("ProjectInfo", "<p>Database Name: <strong>" . $this->getDatabaseName() . "</strong></p>"), "Intro");
-        $fields->addFieldToTab("Root.ProjectInfo", new FormAction('doBackup', 'Create a Database-Dump'));
 
         $controller = Controller::curr();
         $fields->addFieldToTab("Root.ProjectInfo", new LiteralField("ProjectInfo", "<p><a href='".$controller->Link('doBackup')."' target='_blank'>Create database dump</a></p>"));
