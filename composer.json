@@ -12,7 +12,8 @@
     "require": {
         "silverstripe/framework": "^5.0",
         "silverstripe/admin": "^2.0",
-        "spatie/db-dumper": "^3.4"
+        "spatie/db-dumper": "^3.4",
+        "alchemy/zippy": "v0.5.x-dev",
     },
     "minimum-stability": "dev",
     "prefer-stable": true
