@@ -2,15 +2,15 @@
 
 namespace Atwx\ProjectInfo\Extensions;
 
+use SilverStripe\Core\Extension;
+use Spatie\DbDumper\Databases\MySql;
 use SilverStripe\Core\Environment;
-use SilverStripe\Admin\LeftAndMainExtension;
-use SilverStripe\ORM\DB;
 use ZipArchive;
 use RecursiveIteratorIterator;
 use RecursiveDirectoryIterator;
 
 
-class LeftAndMainBackupExport extends LeftAndMainExtension
+class LeftAndMainBackupExport extends Extension
 {
     private static $allowed_actions = array(
         'doBackup',
@@ -22,7 +22,7 @@ class LeftAndMainBackupExport extends LeftAndMainExtension
         $user = Environment::getEnv('SS_DATABASE_USERNAME');
         $pass = Environment::getEnv('SS_DATABASE_PASSWORD');
         $name = Environment::getEnv('SS_DATABASE_NAME');
-        \Spatie\DbDumper\Databases\MySql::create()
+        MySql::create()
         ->setHost($host)
         ->setDbName($name)
         ->setUserName($user)
