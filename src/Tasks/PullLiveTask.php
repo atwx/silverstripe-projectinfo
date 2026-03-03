@@ -23,7 +23,7 @@ class PullLiveTask extends BuildTask
     public function getOptions(): array
     {
         return [
-            new InputOption('token', 't', InputOption::VALUE_REQUIRED, 'Personal Access Token for intra.atw.io'),
+            new InputOption('token', 't', InputOption::VALUE_OPTIONAL, 'Personal Access Token (default: $ATW_PERSONAL_TOKEN)'),
             new InputOption('url', 'u', InputOption::VALUE_REQUIRED, 'Base URL of the live site (e.g. https://docs.atw.io)'),
             new InputOption('intranet-url', 'i', InputOption::VALUE_OPTIONAL, 'Token API URL', 'https://intra.atw.io/_api/token'),
         ];
@@ -32,13 +32,18 @@ class PullLiveTask extends BuildTask
     #[\Override]
     protected function execute(InputInterface $input, PolyOutput $output): int
     {
-        $token = $input->getOption('token');
+        $token = $input->getOption('token') ?: getenv('ATW_PERSONAL_TOKEN');
         $remoteUrl = $input->getOption('url');
         $intranetUrl = $input->getOption('intranet-url') ?: 'https://intra.atw.io/_api/token';
 
-        if (!$token || !$remoteUrl) {
-            $output->writeln('<error>--token and --url are required.</error>');
-            $output->writeln('Usage: sake tasks:pull-live -t pat_... -u docs.atw.io');
+        if (!$token) {
+            $output->writeln('<error>No token provided. Pass --token/-t or set ATW_PERSONAL_TOKEN in your shell.</error>');
+            return Command::FAILURE;
+        }
+
+        if (!$remoteUrl) {
+            $output->writeln('<error>--url is required.</error>');
+            $output->writeln('Usage: sake tasks:pull-live -u docs.atw.io');
             return Command::FAILURE;
         }
 
