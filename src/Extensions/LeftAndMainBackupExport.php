@@ -5,77 +5,140 @@ namespace Atwx\ProjectInfo\Extensions;
 use SilverStripe\Core\Extension;
 use Spatie\DbDumper\Databases\MySql;
 use SilverStripe\Core\Environment;
-use ZipArchive;
-use RecursiveIteratorIterator;
-use RecursiveDirectoryIterator;
-
+use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Control\HTTPResponse;
 
 class LeftAndMainBackupExport extends Extension
 {
-    private static $allowed_actions = array(
+    private static $allowed_actions = [
         'doBackup',
         'doDownloadAssets',
-    );
+        'doListAssets',
+        'doDownloadAsset',
+    ];
 
-    public function doBackup() {
+    public function doBackup(): void
+    {
         $host = Environment::getEnv('SS_DATABASE_SERVER');
         $user = Environment::getEnv('SS_DATABASE_USERNAME');
         $pass = Environment::getEnv('SS_DATABASE_PASSWORD');
         $name = Environment::getEnv('SS_DATABASE_NAME');
-        MySql::create()
-        ->setHost($host)
-        ->setDbName($name)
-        ->setUserName($user)
-        ->setPassword($pass)
-        ->dumpToFile(BASE_PATH.'/dump-'.$name.'-'.date('Y-m-d-H-i-s').'.sql');
 
-        //Download file
-        $file = BASE_PATH.'/dump-'.$name.'-'.date('Y-m-d-H-i-s').'.sql';
+        $file = BASE_PATH . '/dump-' . $name . '-' . date('Y-m-d-H-i-s') . '.sql';
+
+        MySql::create()
+            ->setHost($host)
+            ->setDbName($name)
+            ->setUserName($user)
+            ->setPassword($pass)
+            ->dumpToFile($file);
+
         header('Content-Description: File Transfer');
-        header('Content-Disposition: attachment; filename="'.basename($file).'"');
+        header('Content-Disposition: attachment; filename="' . basename($file) . '"');
         header('Expires: 0');
         header('Cache-Control: must-revalidate');
+        header('Content-Type: application/octet-stream');
         header('Content-Length: ' . filesize($file));
         readfile($file);
         unlink($file);
         exit;
     }
 
-    public function doDownloadAssets() {
-        // Initialize archive object
-        $zip = new ZipArchive();
-        $zip->open('assets.zip', ZipArchive::CREATE | ZipArchive::OVERWRITE);
-
+    public function doDownloadAssets(): void
+    {
+        $zipFile = sys_get_temp_dir() . '/assets-' . date('Y-m-d-H-i-s') . '.zip';
         $rootPath = ASSETS_PATH;
 
-        // Create recursive directory iterator
-        /** @var SplFileInfo[] $files */
-        $files = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($rootPath),
-            RecursiveIteratorIterator::LEAVES_ONLY
+        $zip = new \ZipArchive();
+        $zip->open($zipFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+
+        $files = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($rootPath),
+            \RecursiveIteratorIterator::LEAVES_ONLY
         );
 
-        foreach ($files as $file)
-        {
-            // Skip directories (they would be added automatically)
-            if (!$file->isDir())
-            {
-                // Get real and relative path for current file
+        foreach ($files as $file) {
+            if (!$file->isDir()) {
                 $filePath = $file->getRealPath();
                 $relativePath = substr($filePath, strlen($rootPath) + 1);
-
-                // Add current file to archive
                 $zip->addFile($filePath, $relativePath);
             }
         }
 
         $zip->close();
+
         header('Content-Description: File Transfer');
         header('Content-Disposition: attachment; filename="assets.zip"');
         header('Expires: 0');
         header('Cache-Control: must-revalidate');
-        header('Content-Length: ' . filesize('assets.zip'));
-        readfile('assets.zip');
-        unlink('assets.zip');
+        header('Content-Type: application/zip');
+        header('Content-Length: ' . filesize($zipFile));
+        readfile($zipFile);
+        unlink($zipFile);
+        exit;
+    }
+
+    public function doListAssets(HTTPRequest $request): HTTPResponse
+    {
+        $rootPath = ASSETS_PATH;
+        $files = [];
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($rootPath, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::LEAVES_ONLY
+        );
+
+        foreach ($iterator as $file) {
+            if (!$file->isDir()) {
+                $realPath = $file->getRealPath();
+                $relativePath = substr($realPath, strlen($rootPath) + 1);
+                $files[] = [
+                    'path' => $relativePath,
+                    'size' => $file->getSize(),
+                    'mtime' => $file->getMTime(),
+                    'md5' => md5_file($realPath),
+                ];
+            }
+        }
+
+        return HTTPResponse::create()
+            ->addHeader('Content-Type', 'application/json')
+            ->setBody(json_encode($files, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    }
+
+    public function doDownloadAsset(HTTPRequest $request): void
+    {
+        $relativePath = $request->getVar('path');
+
+        if (!$relativePath) {
+            http_response_code(400);
+            echo 'Missing path parameter';
+            exit;
+        }
+
+        // Resolve and validate that the path stays within ASSETS_PATH
+        $realRoot = realpath(ASSETS_PATH);
+        $fullPath = realpath($realRoot . '/' . $relativePath);
+
+        if ($fullPath === false || strpos($fullPath, $realRoot . DIRECTORY_SEPARATOR) !== 0) {
+            http_response_code(403);
+            echo 'Invalid path';
+            exit;
+        }
+
+        if (!is_file($fullPath)) {
+            http_response_code(404);
+            echo 'File not found';
+            exit;
+        }
+
+        header('Content-Description: File Transfer');
+        header('Content-Disposition: attachment; filename="' . basename($fullPath) . '"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Content-Type: application/octet-stream');
+        header('Content-Length: ' . filesize($fullPath));
+        readfile($fullPath);
+        exit;
     }
 }

@@ -10,32 +10,35 @@ use SilverStripe\Forms\LiteralField;
 use SilverStripe\Control\Controller;
 
 /**
- * Class \App\CustomSiteConfig
- *
- * @property SiteConfig|\App\CustomSiteConfig $owner
- * @property string $DateText
- * @property string $PlaceText
- * @property bool $ShowBanner
- * @property string $BannerText
- * @property string $AckMessageSubject
- * @property string $AckMessageContent
+ * @property SiteConfig|ProjectInfoExtension $owner
  */
 class ProjectInfoExtension extends Extension
 {
-    public function updateCMSFields(FieldList $fields)
+    public function updateCMSFields(FieldList $fields): void
     {
-        $fields->addFieldToTab("Root.ProjectInfo", LiteralField::create("ProjectInfo", "<h2>Project Info</h2>"));
-//        $fields->addFieldToTab("Root.ProjectInfo", new LiteralField("ProjectInfo", "<h3>Here is Info about this project:</h3>"));
-        $fields->addFieldToTab("Root.ProjectInfo", LiteralField::create("ProjectInfo", "<p>Database Name: <strong>" . $this->getDatabaseName() . "</strong></p>"), "Intro");
-
         $controller = Controller::curr();
-        $fields->addFieldToTab("Root.ProjectInfo", LiteralField::create("ProjectInfo", "<p><a class='btn btn-primary' href='".$controller->Link('doBackup')."' target='_blank'>Create database dump</a></p>"));
-        $assetsDirSize = shell_exec("du -sh ".ASSETS_PATH."| awk '{ print $1 }'");
-        $fields->addFieldToTab("Root.ProjectInfo", LiteralField::create("ProjectInfo", "<p><a class='btn btn-primary' href='".$controller->Link('doDownloadAssets')."' target='_blank'>Download assets</a></p><p>Assets: $assetsDirSize</p>"));
+        $assetsDirSize = shell_exec("du -sh " . ASSETS_PATH . " | awk '{ print $1 }'");
+        $assetListUrl = $controller->Link('doListAssets');
+
+        $fields->addFieldToTab("Root.ProjectInfo", LiteralField::create("PIHeading", "<h2>Project Info</h2>"));
+        $fields->addFieldToTab("Root.ProjectInfo", LiteralField::create("PIDatabase", "<p>Database: <strong>" . $this->getDatabaseName() . "</strong></p>"));
+
+        $fields->addFieldToTab("Root.ProjectInfo", LiteralField::create("PIBackup",
+            "<p><a class='btn btn-primary' href='" . $controller->Link('doBackup') . "' target='_blank'>Create database dump</a></p>"
+        ));
+
+        $fields->addFieldToTab("Root.ProjectInfo", LiteralField::create("PIAssets",
+            "<p>Assets: <strong>$assetsDirSize</strong></p>"
+            . "<p>"
+            . "<a class='btn btn-primary' href='" . $controller->Link('doDownloadAssets') . "' target='_blank'>Download all assets (ZIP)</a>&nbsp;&nbsp;"
+            . "<a class='btn btn-secondary' href='" . $assetListUrl . "' target='_blank'>Asset list (JSON)</a>"
+            . "</p>"
+            . "<p><small>To pull individual assets: <code>GET " . $assetListUrl . "</code> → then fetch each file via <code>" . $controller->Link('doDownloadAsset') . "?path=&lt;relative-path&gt;</code></small></p>"
+        ));
     }
 
-    public function getDatabaseName()
+    public function getDatabaseName(): string
     {
-        return Environment::getEnv('SS_DATABASE_NAME');
+        return (string) Environment::getEnv('SS_DATABASE_NAME');
     }
 }
