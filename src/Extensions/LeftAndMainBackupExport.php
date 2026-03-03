@@ -80,7 +80,7 @@ class LeftAndMainBackupExport extends Extension
 
     public function doListAssets(HTTPRequest $request): HTTPResponse
     {
-        $rootPath = ASSETS_PATH;
+        $rootPath = realpath(ASSETS_PATH) ?: ASSETS_PATH;
         $files = [];
 
         $iterator = new \RecursiveIteratorIterator(
@@ -116,15 +116,15 @@ class LeftAndMainBackupExport extends Extension
             exit;
         }
 
-        // Resolve and validate that the path stays within ASSETS_PATH
-        $realRoot = realpath(ASSETS_PATH);
-        $fullPath = realpath($realRoot . '/' . $relativePath);
-
-        if ($fullPath === false || strpos($fullPath, $realRoot . DIRECTORY_SEPARATOR) !== 0) {
+        // Security: reject path traversal attempts
+        if (str_contains($relativePath, '..') || str_contains($relativePath, "\0")) {
             http_response_code(403);
             echo 'Invalid path';
             exit;
         }
+
+        $realRoot = realpath(ASSETS_PATH) ?: ASSETS_PATH;
+        $fullPath = $realRoot . DIRECTORY_SEPARATOR . $relativePath;
 
         if (!is_file($fullPath)) {
             http_response_code(404);

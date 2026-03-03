@@ -154,14 +154,29 @@ class PullLivedataTask extends BuildTask
         ]);
 
         $baseDir = BASE_PATH . '/_livedata/assets';
+        $skipped = 0;
+        $downloaded = 0;
+        $errors = 0;
+
+        // Show first few paths for debugging
+        $sample = array_slice($list, 0, 5);
+        foreach ($sample as $entry) {
+            $output->writeln('  [sample path] ' . ($entry['path'] ?? '(empty)'));
+        }
 
         foreach ($list as $entry) {
-            $relativePath = $entry['path'];
-            $remoteMd5 = $entry['md5'];
+            $relativePath = $entry['path'] ?? '';
+            $remoteMd5 = $entry['md5'] ?? '';
+
+            if ($relativePath === '') {
+                continue;
+            }
+
             $localPath = $baseDir . '/' . $relativePath;
 
             if (is_file($localPath) && md5_file($localPath) === $remoteMd5) {
                 $output->writeln("Skipping (unchanged): $relativePath");
+                $skipped++;
                 continue;
             }
 
@@ -171,11 +186,18 @@ class PullLivedataTask extends BuildTask
             }
 
             $output->writeln("Downloading: $relativePath");
-            $response = $client->get($remoteUrl . '/admin/settings/doDownloadAsset', [
-                'query' => ['path' => $relativePath],
-            ]);
-
-            file_put_contents($localPath, (string) $response->getBody());
+            try {
+                $response = $client->get($remoteUrl . '/admin/settings/doDownloadAsset', [
+                    'query' => ['path' => $relativePath],
+                ]);
+                file_put_contents($localPath, (string) $response->getBody());
+                $downloaded++;
+            } catch (\Throwable $e) {
+                $output->writeln('<error>  Failed: ' . $e->getMessage() . '</error>');
+                $errors++;
+            }
         }
+
+        $output->writeln("Assets: $downloaded downloaded, $skipped skipped, $errors errors.");
     }
 }
