@@ -13,7 +13,8 @@
         "silverstripe/framework": "^6",
         "silverstripe/admin": "^3",
         "spatie/db-dumper": "^3.4",
-        "alchemy/zippy": "v0.5.x-dev"
+        "alchemy/zippy": "v0.5.x-dev",
+        "guzzlehttp/guzzle": "^7.0"
     },
     "minimum-stability": "dev",
     "prefer-stable": true
