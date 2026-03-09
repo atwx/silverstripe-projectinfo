@@ -28,6 +28,8 @@ class PullLiveTask extends BuildTask
             new InputOption('intranet-url', 'i', InputOption::VALUE_OPTIONAL, 'Token API URL', 'https://intra.atw.io/_api/token'),
             new InputOption('only-db', null, InputOption::VALUE_NONE, 'Only pull and import the database, skip assets'),
             new InputOption('only-assets', null, InputOption::VALUE_NONE, 'Only pull and import assets, skip database'),
+            new InputOption('http-user', null, InputOption::VALUE_OPTIONAL, 'HTTP Basic Auth username for the target site'),
+            new InputOption('http-pass', null, InputOption::VALUE_OPTIONAL, 'HTTP Basic Auth password for the target site'),
         ];
     }
 
@@ -39,6 +41,9 @@ class PullLiveTask extends BuildTask
         $intranetUrl = $input->getOption('intranet-url') ?: 'https://intra.atw.io/_api/token';
         $onlyDb = (bool) $input->getOption('only-db');
         $onlyAssets = (bool) $input->getOption('only-assets');
+        $httpUser = $input->getOption('http-user');
+        $httpPass = $input->getOption('http-pass');
+        $httpAuth = ($httpUser && $httpPass) ? [$httpUser, $httpPass] : null;
 
         if ($onlyDb && $onlyAssets) {
             $output->writeln('<error>--only-db and --only-assets are mutually exclusive.</error>');
@@ -70,22 +75,22 @@ class PullLiveTask extends BuildTask
             $jwt = $this->fetchJwt($token, parse_url($remoteUrl, PHP_URL_HOST), $intranetUrl);
 
             $output->writeln('Authenticating...');
-            $cookies = $this->authenticate($jwt, $remoteUrl);
+            $cookies = $this->authenticate($jwt, $remoteUrl, $httpAuth);
 
             $dumpFile = null;
             if ($doDb) {
                 $output->writeln('Downloading database dump...');
-                $dumpFile = $this->downloadDatabase($remoteUrl, $cookies);
+                $dumpFile = $this->downloadDatabase($remoteUrl, $cookies, $httpAuth);
                 $output->writeln("Saved to $dumpFile");
             }
 
             if ($doAssets) {
                 $output->writeln('Fetching asset list...');
-                $list = $this->fetchAssetList($remoteUrl, $cookies);
+                $list = $this->fetchAssetList($remoteUrl, $cookies, $httpAuth);
                 $output->writeln(count($list) . ' assets on remote.');
 
                 $output->writeln('Syncing assets...');
-                $this->syncAssets($remoteUrl, $list, $cookies, $output);
+                $this->syncAssets($remoteUrl, $list, $cookies, $output, $httpAuth);
             }
 
             // --- Import ---
@@ -123,17 +128,25 @@ class PullLiveTask extends BuildTask
         return $data['jwt'];
     }
 
-    private function authenticate(string $jwt, string $remoteUrl): CookieJar
+    private function authenticate(string $jwt, string $remoteUrl, ?array $httpAuth = null): CookieJar
     {
         $cookies = new CookieJar();
-        $client = new Client(['timeout' => 30, 'allow_redirects' => true, 'cookies' => $cookies]);
+        $clientOptions = ['timeout' => 30, 'allow_redirects' => true, 'cookies' => $cookies];
+        if ($httpAuth) {
+            $clientOptions['auth'] = $httpAuth;
+        }
+        $client = new Client($clientOptions);
         $client->get($remoteUrl . '/_silvergateclient/token/' . urlencode(base64_encode($jwt)));
         return $cookies;
     }
 
-    private function downloadDatabase(string $remoteUrl, CookieJar $cookies): string
+    private function downloadDatabase(string $remoteUrl, CookieJar $cookies, ?array $httpAuth = null): string
     {
-        $client = new Client(['timeout' => 120, 'cookies' => $cookies]);
+        $clientOptions = ['timeout' => 120, 'cookies' => $cookies];
+        if ($httpAuth) {
+            $clientOptions['auth'] = $httpAuth;
+        }
+        $client = new Client($clientOptions);
         $response = $client->get($remoteUrl . '/admin/settings/doBackup');
 
         $dir = BASE_PATH . '/_livedata/db';
@@ -146,9 +159,13 @@ class PullLiveTask extends BuildTask
         return $file;
     }
 
-    private function fetchAssetList(string $remoteUrl, CookieJar $cookies): array
+    private function fetchAssetList(string $remoteUrl, CookieJar $cookies, ?array $httpAuth = null): array
     {
-        $client = new Client(['timeout' => 60, 'cookies' => $cookies]);
+        $clientOptions = ['timeout' => 60, 'cookies' => $cookies];
+        if ($httpAuth) {
+            $clientOptions['auth'] = $httpAuth;
+        }
+        $client = new Client($clientOptions);
         $response = $client->get($remoteUrl . '/admin/settings/doListAssets');
         $list = json_decode((string) $response->getBody(), true);
 
@@ -159,9 +176,13 @@ class PullLiveTask extends BuildTask
         return $list;
     }
 
-    private function syncAssets(string $remoteUrl, array $list, CookieJar $cookies, PolyOutput $output): void
+    private function syncAssets(string $remoteUrl, array $list, CookieJar $cookies, PolyOutput $output, ?array $httpAuth = null): void
     {
-        $client = new Client(['timeout' => 60, 'cookies' => $cookies]);
+        $clientOptions = ['timeout' => 60, 'cookies' => $cookies];
+        if ($httpAuth) {
+            $clientOptions['auth'] = $httpAuth;
+        }
+        $client = new Client($clientOptions);
         $baseDir = BASE_PATH . '/_livedata/assets';
         $downloaded = 0;
         $skipped = 0;
