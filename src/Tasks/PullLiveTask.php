@@ -23,21 +23,33 @@ class PullLiveTask extends BuildTask
     public function getOptions(): array
     {
         return [
-            new InputOption('token', 't', InputOption::VALUE_OPTIONAL, 'Personal Access Token (default: $ATW_PERSONAL_TOKEN)'),
+            new InputOption('token', 't', InputOption::VALUE_REQUIRED, 'Personal Access Token'),
             new InputOption('url', 'u', InputOption::VALUE_REQUIRED, 'Base URL of the live site (e.g. https://docs.atw.io)'),
             new InputOption('intranet-url', 'i', InputOption::VALUE_OPTIONAL, 'Token API URL', 'https://intra.atw.io/_api/token'),
+            new InputOption('only-db', null, InputOption::VALUE_NONE, 'Only pull and import the database, skip assets'),
+            new InputOption('only-assets', null, InputOption::VALUE_NONE, 'Only pull and import assets, skip database'),
         ];
     }
 
     #[\Override]
     protected function execute(InputInterface $input, PolyOutput $output): int
     {
-        $token = $input->getOption('token') ?: getenv('ATW_PERSONAL_TOKEN');
+        $token = $input->getOption('token');
         $remoteUrl = $input->getOption('url');
         $intranetUrl = $input->getOption('intranet-url') ?: 'https://intra.atw.io/_api/token';
+        $onlyDb = (bool) $input->getOption('only-db');
+        $onlyAssets = (bool) $input->getOption('only-assets');
+
+        if ($onlyDb && $onlyAssets) {
+            $output->writeln('<error>--only-db and --only-assets are mutually exclusive.</error>');
+            return Command::FAILURE;
+        }
+
+        $doDb = !$onlyAssets;
+        $doAssets = !$onlyDb;
 
         if (!$token) {
-            $output->writeln('<error>No token provided. Pass --token/-t or set ATW_PERSONAL_TOKEN in your shell.</error>');
+            $output->writeln('<error>No token provided. Pass --token/-t.</error>');
             return Command::FAILURE;
         }
 
@@ -60,23 +72,32 @@ class PullLiveTask extends BuildTask
             $output->writeln('Authenticating...');
             $cookies = $this->authenticate($jwt, $remoteUrl);
 
-            $output->writeln('Downloading database dump...');
-            $dumpFile = $this->downloadDatabase($remoteUrl, $cookies);
-            $output->writeln("Saved to $dumpFile");
+            $dumpFile = null;
+            if ($doDb) {
+                $output->writeln('Downloading database dump...');
+                $dumpFile = $this->downloadDatabase($remoteUrl, $cookies);
+                $output->writeln("Saved to $dumpFile");
+            }
 
-            $output->writeln('Fetching asset list...');
-            $list = $this->fetchAssetList($remoteUrl, $cookies);
-            $output->writeln(count($list) . ' assets on remote.');
+            if ($doAssets) {
+                $output->writeln('Fetching asset list...');
+                $list = $this->fetchAssetList($remoteUrl, $cookies);
+                $output->writeln(count($list) . ' assets on remote.');
 
-            $output->writeln('Syncing assets...');
-            $this->syncAssets($remoteUrl, $list, $cookies, $output);
+                $output->writeln('Syncing assets...');
+                $this->syncAssets($remoteUrl, $list, $cookies, $output);
+            }
 
             // --- Import ---
-            $output->writeln('Importing database...');
-            $this->importDatabase($dumpFile, $output);
+            if ($doDb && $dumpFile !== null) {
+                $output->writeln('Importing database...');
+                $this->importDatabase($dumpFile, $output);
+            }
 
-            $output->writeln('Copying assets...');
-            $this->importAssets($output);
+            if ($doAssets) {
+                $output->writeln('Copying assets...');
+                $this->importAssets($output);
+            }
 
             $output->writeln('<info>Done. Run sake db:build --flush if needed.</info>');
             return Command::SUCCESS;
