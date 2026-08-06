@@ -24,11 +24,15 @@ On `ss5` the Silverstripe 4/5 `BuildTask` API has no options, so the parameters 
 passed as GET vars instead:
 
 ```bash
-vendor/bin/sake dev/tasks/pull-live url=docs.atw.io token=<token>
+vendor/bin/sake dev/tasks/pull-live site=docs.atw.io token=<token>
 ```
 
-Available parameters: `url`, `token`, `intranet-url`, `only-db`, `only-assets`,
+Available parameters: `site`, `token`, `intranet-url`, `only-db`, `only-assets`,
 `http-user`, `http-pass`.
+
+Note the remote site is `site` here, not `url` as on `main`. Silverstripe's
+`CLIRequestBuilder` overwrites the `url` GET var with the route being called, so a
+`url` parameter would never reach the task.
 
 Downloads land in `_livedata/db` and `_livedata/assets` before being imported into the
 database and `ASSETS_PATH`.

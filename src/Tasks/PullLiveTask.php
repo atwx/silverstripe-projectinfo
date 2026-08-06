@@ -21,15 +21,19 @@ class PullLiveTask extends BuildTask
     /**
      * Parameters are passed as GET vars, both on CLI and in the browser:
      *
-     *   vendor/bin/sake dev/tasks/pull-live url=docs.atw.io token=xyz
-     *   vendor/bin/sake dev/tasks/pull-live url=docs.atw.io token=xyz only-db=1
+     *   vendor/bin/sake dev/tasks/pull-live site=docs.atw.io token=xyz
+     *   vendor/bin/sake dev/tasks/pull-live site=docs.atw.io token=xyz only-db=1
+     *
+     * Note that the remote site is passed as `site`, not `url`: on the CLI,
+     * CLIRequestBuilder::cleanEnvironment() overwrites the `url` GET var with the
+     * route that is being called, so a `url` parameter would never reach us.
      *
      * @param HTTPRequest $request
      */
     public function run($request)
     {
         $token = $request->getVar('token');
-        $remoteUrl = $request->getVar('url');
+        $remoteUrl = $request->getVar('site');
         $intranetUrl = $request->getVar('intranet-url') ?: 'https://intra.atw.io/_api/token';
         $onlyDb = (bool) $request->getVar('only-db');
         $onlyAssets = (bool) $request->getVar('only-assets');
@@ -51,7 +55,7 @@ class PullLiveTask extends BuildTask
         }
 
         if (!$remoteUrl) {
-            $this->fail('url is required. Usage: sake dev/tasks/pull-live url=docs.atw.io token=<token>');
+            $this->fail('site is required. Usage: sake dev/tasks/pull-live site=docs.atw.io token=<token>');
             return;
         }
 
