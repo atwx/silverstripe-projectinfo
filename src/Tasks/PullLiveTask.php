@@ -4,64 +4,55 @@ namespace Atwx\ProjectInfo\Tasks;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
+use SilverStripe\Control\Director;
+use SilverStripe\Control\HTTPRequest;
+use SilverStripe\Core\Convert;
 use SilverStripe\Core\Environment;
 use SilverStripe\Dev\BuildTask;
-use SilverStripe\PolyExecution\PolyOutput;
-use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Input\InputOption;
 
 class PullLiveTask extends BuildTask
 {
-    protected string $title = 'Pull Live';
+    protected $title = 'Pull Live';
 
-    protected static string $description = 'Pull DB + assets from the live server and import them into the local environment.';
+    protected $description = 'Pull DB + assets from the live server and import them into the local environment.';
 
-    protected static string $commandName = 'pull-live';
+    private static $segment = 'pull-live';
 
-    #[\Override]
-    public function getOptions(): array
+    /**
+     * Parameters are passed as GET vars, both on CLI and in the browser:
+     *
+     *   vendor/bin/sake dev/tasks/pull-live url=docs.atw.io token=xyz
+     *   vendor/bin/sake dev/tasks/pull-live url=docs.atw.io token=xyz only-db=1
+     *
+     * @param HTTPRequest $request
+     */
+    public function run($request)
     {
-        return [
-            new InputOption('token', 't', InputOption::VALUE_REQUIRED, 'Personal Access Token'),
-            new InputOption('url', 'u', InputOption::VALUE_REQUIRED, 'Base URL of the live site (e.g. https://docs.atw.io)'),
-            new InputOption('intranet-url', 'i', InputOption::VALUE_OPTIONAL, 'Token API URL', 'https://intra.atw.io/_api/token'),
-            new InputOption('only-db', null, InputOption::VALUE_NONE, 'Only pull and import the database, skip assets'),
-            new InputOption('only-assets', null, InputOption::VALUE_NONE, 'Only pull and import assets, skip database'),
-            new InputOption('http-user', null, InputOption::VALUE_OPTIONAL, 'HTTP Basic Auth username for the target site'),
-            new InputOption('http-pass', null, InputOption::VALUE_OPTIONAL, 'HTTP Basic Auth password for the target site'),
-        ];
-    }
-
-    #[\Override]
-    protected function execute(InputInterface $input, PolyOutput $output): int
-    {
-        $token = $input->getOption('token');
-        $remoteUrl = $input->getOption('url');
-        $intranetUrl = $input->getOption('intranet-url') ?: 'https://intra.atw.io/_api/token';
-        $onlyDb = (bool) $input->getOption('only-db');
-        $onlyAssets = (bool) $input->getOption('only-assets');
-        $httpUser = $input->getOption('http-user');
-        $httpPass = $input->getOption('http-pass');
+        $token = $request->getVar('token');
+        $remoteUrl = $request->getVar('url');
+        $intranetUrl = $request->getVar('intranet-url') ?: 'https://intra.atw.io/_api/token';
+        $onlyDb = (bool) $request->getVar('only-db');
+        $onlyAssets = (bool) $request->getVar('only-assets');
+        $httpUser = $request->getVar('http-user');
+        $httpPass = $request->getVar('http-pass');
         $httpAuth = ($httpUser && $httpPass) ? [$httpUser, $httpPass] : null;
 
         if ($onlyDb && $onlyAssets) {
-            $output->writeln('<error>--only-db and --only-assets are mutually exclusive.</error>');
-            return Command::FAILURE;
+            $this->fail('only-db and only-assets are mutually exclusive.');
+            return;
         }
 
         $doDb = !$onlyAssets;
         $doAssets = !$onlyDb;
 
         if (!$token) {
-            $output->writeln('<error>No token provided. Pass --token/-t.</error>');
-            return Command::FAILURE;
+            $this->fail('No token provided. Pass token=<personal access token>.');
+            return;
         }
 
         if (!$remoteUrl) {
-            $output->writeln('<error>--url is required.</error>');
-            $output->writeln('Usage: sake tasks:pull-live -u docs.atw.io');
-            return Command::FAILURE;
+            $this->fail('url is required. Usage: sake dev/tasks/pull-live url=docs.atw.io token=<token>');
+            return;
         }
 
         $remoteUrl = rtrim($remoteUrl, '/');
@@ -71,45 +62,70 @@ class PullLiveTask extends BuildTask
 
         try {
             // --- Pull ---
-            $output->writeln('Fetching JWT...');
+            $this->write('Fetching JWT...');
             $jwt = $this->fetchJwt($token, parse_url($remoteUrl, PHP_URL_HOST), $intranetUrl);
 
-            $output->writeln('Authenticating...');
+            $this->write('Authenticating...');
             $cookies = $this->authenticate($jwt, $remoteUrl, $httpAuth);
 
             $dumpFile = null;
             if ($doDb) {
-                $output->writeln('Downloading database dump...');
+                $this->write('Downloading database dump...');
                 $dumpFile = $this->downloadDatabase($remoteUrl, $cookies, $httpAuth);
-                $output->writeln("Saved to $dumpFile");
+                $this->write("Saved to $dumpFile");
             }
 
             if ($doAssets) {
-                $output->writeln('Fetching asset list...');
+                $this->write('Fetching asset list...');
                 $list = $this->fetchAssetList($remoteUrl, $cookies, $httpAuth);
-                $output->writeln(count($list) . ' assets on remote.');
+                $this->write(count($list) . ' assets on remote.');
 
-                $output->writeln('Syncing assets...');
-                $this->syncAssets($remoteUrl, $list, $cookies, $output, $httpAuth);
+                $this->write('Syncing assets...');
+                $this->syncAssets($remoteUrl, $list, $cookies, $httpAuth);
             }
 
             // --- Import ---
             if ($doDb && $dumpFile !== null) {
-                $output->writeln('Importing database...');
-                $this->importDatabase($dumpFile, $output);
+                $this->write('Importing database...');
+                $this->importDatabase($dumpFile);
             }
 
             if ($doAssets) {
-                $output->writeln('Copying assets...');
-                $this->importAssets($output);
+                $this->write('Copying assets...');
+                $this->importAssets();
             }
 
-            $output->writeln('<info>Done. Run sake db:build --flush if needed.</info>');
-            return Command::SUCCESS;
+            $this->write('Done. Run sake dev/build flush=1 if needed.');
         } catch (\Throwable $e) {
-            $output->writeln('<error>' . $e->getMessage() . '</error>');
-            return Command::FAILURE;
+            $this->fail($e->getMessage());
         }
+    }
+
+    /**
+     * Write a progress line, working both on CLI and in the browser.
+     */
+    private function write(string $text): void
+    {
+        if (Director::is_cli()) {
+            echo $text . PHP_EOL;
+        } else {
+            echo '<p>' . Convert::raw2xml($text) . '</p>' . PHP_EOL;
+        }
+        flush();
+    }
+
+    /**
+     * Report a failure. On CLI this exits with a non-zero status so the task can
+     * be used in scripts.
+     */
+    private function fail(string $text): void
+    {
+        if (Director::is_cli()) {
+            fwrite(STDERR, $text . PHP_EOL);
+            exit(1);
+        }
+
+        echo '<p style="color:#c00">' . Convert::raw2xml($text) . '</p>' . PHP_EOL;
     }
 
     private function fetchJwt(string $token, string $domain, string $intranetUrl): string
@@ -176,7 +192,7 @@ class PullLiveTask extends BuildTask
         return $list;
     }
 
-    private function syncAssets(string $remoteUrl, array $list, CookieJar $cookies, PolyOutput $output, ?array $httpAuth = null): void
+    private function syncAssets(string $remoteUrl, array $list, CookieJar $cookies, ?array $httpAuth = null): void
     {
         $clientOptions = ['timeout' => 60, 'cookies' => $cookies];
         if ($httpAuth) {
@@ -213,15 +229,15 @@ class PullLiveTask extends BuildTask
                 file_put_contents($localPath, (string) $response->getBody());
                 $downloaded++;
             } catch (\Throwable $e) {
-                $output->writeln('<error>  Failed ' . $relativePath . ': ' . $e->getMessage() . '</error>');
+                $this->write('  Failed ' . $relativePath . ': ' . $e->getMessage());
                 $errors++;
             }
         }
 
-        $output->writeln("$downloaded downloaded, $skipped unchanged, $errors errors.");
+        $this->write("$downloaded downloaded, $skipped unchanged, $errors errors.");
     }
 
-    private function importDatabase(string $dumpFile, PolyOutput $output): void
+    private function importDatabase(string $dumpFile): void
     {
         $host = Environment::getEnv('SS_DATABASE_SERVER') ?: 'localhost';
         $user = Environment::getEnv('SS_DATABASE_USERNAME');
@@ -248,14 +264,14 @@ class PullLiveTask extends BuildTask
             throw new \RuntimeException('Database import failed: ' . implode("\n", $cmdOutput));
         }
 
-        $output->writeln('Database imported from ' . basename($dumpFile) . '.');
+        $this->write('Database imported from ' . basename($dumpFile) . '.');
     }
 
-    private function importAssets(PolyOutput $output): void
+    private function importAssets(): void
     {
         $sourceDir = BASE_PATH . '/_livedata/assets';
         if (!is_dir($sourceDir)) {
-            $output->writeln('No _livedata/assets/ found, skipping.');
+            $this->write('No _livedata/assets/ found, skipping.');
             return;
         }
 
@@ -293,6 +309,6 @@ class PullLiveTask extends BuildTask
             $copied++;
         }
 
-        $output->writeln("$copied assets copied, $skipped unchanged.");
+        $this->write("$copied assets copied, $skipped unchanged.");
     }
 }
