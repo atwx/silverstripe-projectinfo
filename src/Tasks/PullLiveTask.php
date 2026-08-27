@@ -2,6 +2,7 @@
 
 namespace Atwx\ProjectInfo\Tasks;
 
+use Atwx\ProjectInfo\Services\RemoteSession;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use SilverStripe\Core\Environment;
@@ -23,9 +24,14 @@ class PullLiveTask extends BuildTask
     public function getOptions(): array
     {
         return [
-            new InputOption('token', 't', InputOption::VALUE_REQUIRED, 'Personal Access Token'),
+            new InputOption(
+                'token',
+                't',
+                InputOption::VALUE_REQUIRED,
+                'Personal Access Token. Omit to authorise through the browser instead.'
+            ),
             new InputOption('url', 'u', InputOption::VALUE_REQUIRED, 'Base URL of the live site (e.g. https://docs.atw.io)'),
-            new InputOption('intranet-url', 'i', InputOption::VALUE_OPTIONAL, 'Token API URL', 'https://intra.atw.io/_api/token'),
+            new InputOption('intranet-url', 'i', InputOption::VALUE_OPTIONAL, 'Token API URL', RemoteSession::DEFAULT_INTRANET_URL),
             new InputOption('only-db', null, InputOption::VALUE_NONE, 'Only pull and import the database, skip assets'),
             new InputOption('only-assets', null, InputOption::VALUE_NONE, 'Only pull and import assets, skip database'),
             new InputOption('http-user', null, InputOption::VALUE_OPTIONAL, 'HTTP Basic Auth username for the target site'),
@@ -38,7 +44,7 @@ class PullLiveTask extends BuildTask
     {
         $token = $input->getOption('token');
         $remoteUrl = $input->getOption('url');
-        $intranetUrl = $input->getOption('intranet-url') ?: 'https://intra.atw.io/_api/token';
+        $intranetUrl = $input->getOption('intranet-url') ?: RemoteSession::DEFAULT_INTRANET_URL;
         $onlyDb = (bool) $input->getOption('only-db');
         $onlyAssets = (bool) $input->getOption('only-assets');
         $httpUser = $input->getOption('http-user');
@@ -52,11 +58,6 @@ class PullLiveTask extends BuildTask
 
         $doDb = !$onlyAssets;
         $doAssets = !$onlyDb;
-
-        if (!$token) {
-            $output->writeln('<error>No token provided. Pass --token/-t.</error>');
-            return Command::FAILURE;
-        }
 
         if (!$remoteUrl) {
             $output->writeln('<error>--url is required.</error>');
@@ -72,7 +73,12 @@ class PullLiveTask extends BuildTask
         try {
             // --- Pull ---
             $output->writeln('Fetching JWT...');
-            $jwt = $this->fetchJwt($token, parse_url($remoteUrl, PHP_URL_HOST), $intranetUrl);
+            $host = parse_url($remoteUrl, PHP_URL_HOST);
+
+            // Reading a backup only needs read scope.
+            $jwt = $token
+                ? $this->fetchJwt($token, $host, $intranetUrl)
+                : RemoteSession::create()->fetchJwtWithOAuth($host, $intranetUrl, 'read', $output);
 
             $output->writeln('Authenticating...');
             $cookies = $this->authenticate($jwt, $remoteUrl, $httpAuth);
@@ -114,30 +120,12 @@ class PullLiveTask extends BuildTask
 
     private function fetchJwt(string $token, string $domain, string $intranetUrl): string
     {
-        $client = new Client(['timeout' => 30, 'verify' => false]);
-        $response = $client->post($intranetUrl, [
-            'form_params' => ['token' => $token, 'domain' => $domain],
-        ]);
-
-        $data = json_decode((string) $response->getBody(), true);
-
-        if (!isset($data['jwt'])) {
-            throw new \RuntimeException('No JWT in intranet response: ' . (string) $response->getBody());
-        }
-
-        return $data['jwt'];
+        return RemoteSession::create()->fetchJwt($token, $domain, $intranetUrl);
     }
 
     private function authenticate(string $jwt, string $remoteUrl, ?array $httpAuth = null): CookieJar
     {
-        $cookies = new CookieJar();
-        $clientOptions = ['timeout' => 30, 'allow_redirects' => true, 'cookies' => $cookies];
-        if ($httpAuth) {
-            $clientOptions['auth'] = $httpAuth;
-        }
-        $client = new Client($clientOptions);
-        $client->get($remoteUrl . '/_silvergateclient/token/' . urlencode(base64_encode($jwt)));
-        return $cookies;
+        return RemoteSession::create()->authenticate($jwt, $remoteUrl, $httpAuth);
     }
 
     private function downloadDatabase(string $remoteUrl, CookieJar $cookies, ?array $httpAuth = null): string

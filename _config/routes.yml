@@ -1,0 +1,12 @@
+---
+Name: projectinfo-routes
+Before: '#rootroutes'
+Only:
+  environment: 'dev'
+---
+# Landing spot for the OAuth redirect the command line tools start. The route
+# only exists in dev mode, and the controller checks again, because the target
+# of a redirect on a production site has no business being this.
+SilverStripe\Control\Director:
+  rules:
+    '_silvergateauth': 'Atwx\ProjectInfo\Controllers\OAuthCallbackController'
