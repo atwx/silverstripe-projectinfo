@@ -3,6 +3,7 @@
 namespace Atwx\ProjectInfo\Tasks;
 
 use Atwx\ProjectInfo\Services\RemoteSession;
+use Atwx\ProjectInfo\Services\Status;
 use GuzzleHttp\Client;
 use SilverStripe\Dev\BuildTask;
 use SilverStripe\PolyExecution\PolyOutput;
@@ -73,8 +74,8 @@ class RunRemoteTask extends BuildTask
         $httpAuth = ($httpUser && $httpPass) ? [$httpUser, $httpPass] : null;
 
         if (!$remoteUrl) {
-            $output->writeln('<error>--url is required.</error>');
-            $output->writeln('Usage: sake tasks:remote SendMessagesTask -u www.example.com');
+            Status::note($output, 'Fehler: --url ist erforderlich.');
+            Status::note($output, 'Aufruf: sake tasks:remote SendMessagesTask -u www.example.com');
             return Command::FAILURE;
         }
 
@@ -91,15 +92,14 @@ class RunRemoteTask extends BuildTask
                 ? $session->fetchJwt($token, $host, $intranetUrl)
                 : $session->fetchJwtWithOAuth($host, $intranetUrl, 'write', $output);
 
-            $output->writeln('Authenticating...');
+            Status::note($output, 'Authenticating...');
             $cookies = $session->authenticate($jwt, $remoteUrl, $httpAuth);
 
-            $output->writeln(sprintf('Running %s on %s...', $taskName, $remoteUrl));
-            $output->writeln('');
+            Status::note($output, sprintf('Running %s on %s...', $taskName, $remoteUrl));
 
             return $this->runRemote($remoteUrl, $taskName, $query, $cookies, $httpAuth, $output);
         } catch (\Throwable $e) {
-            $output->writeln('<error>' . $e->getMessage() . '</error>');
+            Status::note($output, 'Fehler: ' . $e->getMessage());
             return Command::FAILURE;
         }
     }
@@ -164,12 +164,12 @@ class RunRemoteTask extends BuildTask
         $status = $response->getStatusCode();
 
         if ($status === 404) {
-            $output->writeln(sprintf('<error>The site has no task called "%s".</error>', $taskName));
+            Status::note($output, sprintf('Die Seite kennt keinen Task "%s".', $taskName));
             return Command::FAILURE;
         }
 
         if ($status >= 400) {
-            $output->writeln(sprintf('<error>The site answered %d.</error>', $status));
+            Status::note($output, sprintf('Die Seite antwortete mit %d.', $status));
             return Command::FAILURE;
         }
 
@@ -189,7 +189,7 @@ class RunRemoteTask extends BuildTask
 
                 if ($this->isFailureNotice($text)) {
                     $failed = true;
-                    $output->writeln('<error>' . $text . '</error>');
+                    Status::note($output, $text);
                     continue;
                 }
 
@@ -219,7 +219,7 @@ class RunRemoteTask extends BuildTask
         }
 
         if (!$sawOutput) {
-            $output->writeln('<comment>The task produced no output.</comment>');
+            Status::note($output, 'Der Task hat nichts ausgegeben.');
         }
 
         return Command::SUCCESS;

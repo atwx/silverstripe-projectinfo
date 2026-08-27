@@ -56,7 +56,7 @@ class OAuthSession
                 return $refreshed['access_token'];
             }
 
-            $output->writeln('<comment>Die gespeicherte Anmeldung ist abgelaufen.</comment>');
+            Status::note($output, 'Die gespeicherte Anmeldung ist abgelaufen.');
         }
 
         return $this->authorise($scope, $output)['access_token'];
@@ -136,12 +136,12 @@ class OAuthSession
             'code_challenge_method' => 'S256',
         ]);
 
-        $output->writeln('');
-        $output->writeln('Einmalige Freigabe nötig. Diesen Link im Browser öffnen:');
-        $output->writeln('');
-        $output->writeln('  ' . $url);
-        $output->writeln('');
-        $output->writeln('Warte auf die Bestätigung...');
+        Status::note($output);
+        Status::note($output, 'Einmalige Freigabe nötig. Diesen Link im Browser öffnen:');
+        Status::note($output);
+        Status::note($output, '  ' . $url);
+        Status::note($output);
+        Status::note($output, 'Warte auf die Bestätigung...');
 
         $answer = $this->waitForCallback($state);
 
@@ -157,7 +157,7 @@ class OAuthSession
             'code_verifier' => $verifier,
         ]);
 
-        $output->writeln('<info>Freigabe erteilt.</info>');
+        Status::note($output, 'Freigabe erteilt.');
 
         return $this->writeStore($tokens + ['client_id' => $clientId, 'redirect_uri' => $redirectUri]);
     }
