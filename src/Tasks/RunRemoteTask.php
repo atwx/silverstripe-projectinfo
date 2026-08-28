@@ -85,12 +85,18 @@ class RunRemoteTask extends BuildTask
         try {
             $session = RemoteSession::create();
 
-            $host = parse_url($remoteUrl, PHP_URL_HOST);
-
             // Running a task changes things, so the JWT has to carry write scope.
-            $jwt = $token
-                ? $session->fetchJwt($token, $host, $intranetUrl)
-                : $session->fetchJwtWithOAuth($host, $intranetUrl, 'write', $output);
+            $auth = $session->authorise(
+                parse_url($remoteUrl, PHP_URL_HOST),
+                $intranetUrl,
+                'write',
+                $output,
+                $token
+            );
+
+            // Follow the manager's spelling of the domain, www or not.
+            $remoteUrl = RemoteSession::normaliseUrl($auth['domain']);
+            $jwt = $auth['jwt'];
 
             Status::note($output, 'Authenticating...');
             $cookies = $session->authenticate($jwt, $remoteUrl, $httpAuth);

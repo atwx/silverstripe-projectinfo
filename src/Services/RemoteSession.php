@@ -40,7 +40,7 @@ class RemoteSession
      */
     public function fetchJwt(string $token, string $domain, string $intranetUrl): string
     {
-        return $this->requestJwt($domain, $intranetUrl, ['token' => $token]);
+        return $this->requestJwt($domain, $intranetUrl, ['token' => $token])['jwt'];
     }
 
     /**
@@ -54,11 +54,7 @@ class RemoteSession
         string $scope,
         PolyOutput $output
     ): string {
-        $managerBase = static::managerBaseFrom($intranetUrl);
-        $oauthScope = $scope === 'write' ? OAuthSession::SCOPE_WRITE : OAuthSession::SCOPE_READ;
-        $accessToken = OAuthSession::create($managerBase)->accessToken($oauthScope, $output);
-
-        return $this->requestJwt($domain, $intranetUrl, [], $accessToken);
+        return $this->authorise($domain, $intranetUrl, $scope, $output)['jwt'];
     }
 
     /**
@@ -69,7 +65,7 @@ class RemoteSession
         string $intranetUrl,
         array $formParams,
         ?string $bearer = null
-    ): string {
+    ): array {
         $options = ['form_params' => $formParams + ['domain' => $domain]];
 
         if ($bearer) {
@@ -85,7 +81,37 @@ class RemoteSession
             throw new \RuntimeException('No JWT in intranet response: ' . (string) $response->getBody());
         }
 
-        return $data['jwt'];
+        return $data;
+    }
+
+    /**
+     * One call for both ways in, returning the JWT together with the spelling of
+     * the domain the manager actually knows. Passing "www.docs.atw.io" for a site
+     * recorded as "docs.atw.io" resolves here but has no certificate, so the
+     * caller has to follow the manager's spelling from here on.
+     *
+     * @return array{jwt: string, domain: string}
+     */
+    public function authorise(
+        string $domain,
+        string $intranetUrl,
+        string $scope,
+        PolyOutput $output,
+        ?string $token = null
+    ): array {
+        $data = $token
+            ? $this->requestJwt($domain, $intranetUrl, ['token' => $token, 'scope' => $scope])
+            : $this->requestJwt(
+                $domain,
+                $intranetUrl,
+                ['scope' => $scope],
+                OAuthSession::create(static::managerBaseFrom($intranetUrl))->accessToken(
+                    $scope === 'write' ? OAuthSession::SCOPE_WRITE : OAuthSession::SCOPE_READ,
+                    $output
+                )
+            );
+
+        return ['jwt' => $data['jwt'], 'domain' => (string) ($data['domain'] ?? $domain)];
     }
 
     /**

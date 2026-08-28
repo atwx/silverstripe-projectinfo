@@ -73,12 +73,19 @@ class PullLiveTask extends BuildTask
         try {
             // --- Pull ---
             $output->writeln('Fetching JWT...');
-            $host = parse_url($remoteUrl, PHP_URL_HOST);
 
             // Reading a backup only needs read scope.
-            $jwt = $token
-                ? $this->fetchJwt($token, $host, $intranetUrl)
-                : RemoteSession::create()->fetchJwtWithOAuth($host, $intranetUrl, 'read', $output);
+            $auth = RemoteSession::create()->authorise(
+                parse_url($remoteUrl, PHP_URL_HOST),
+                $intranetUrl,
+                'read',
+                $output,
+                $token
+            );
+
+            // Follow the manager's spelling of the domain, www or not.
+            $remoteUrl = RemoteSession::normaliseUrl($auth['domain']);
+            $jwt = $auth['jwt'];
 
             $output->writeln('Authenticating...');
             $cookies = $this->authenticate($jwt, $remoteUrl, $httpAuth);
