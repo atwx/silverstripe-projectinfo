@@ -1,6 +1,6 @@
 {
     "name": "atwx/silverstripe-projectinfo",
-    "description": "A Silverstripe module for displaying project information in the CMS",
+    "description": "Shows what a Silverstripe install is running on, and hands out its database and assets.",
     "type": "silverstripe-vendormodule",
     "keywords": [
         "silverstripe",
@@ -10,11 +10,10 @@
     ],
     "license": "BSD-3-Clause",
     "require": {
+        "ext-zip": "*",
         "silverstripe/framework": "^6",
         "silverstripe/admin": "^3",
-        "spatie/db-dumper": "^3.4",
-        "alchemy/zippy": "v0.5.x-dev",
-        "guzzlehttp/guzzle": "^7.0"
+        "spatie/db-dumper": "^3.4"
     },
     "minimum-stability": "dev",
     "prefer-stable": true
