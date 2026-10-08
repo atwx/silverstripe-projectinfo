@@ -116,17 +116,24 @@ class LeftAndMainBackupExport extends Extension
             exit;
         }
 
-        // Security: reject path traversal attempts
-        if (str_contains($relativePath, '..') || str_contains($relativePath, "\0")) {
+        // Security: reject path traversal (".." as a path segment) and null bytes.
+        // A plain substring check would also reject legitimate file names such as
+        // Silverstripe variants ("...__ScaleWidthWzIwMF0..jpg").
+        $segments = preg_split('#[/\\\\]#', $relativePath);
+        if (str_contains($relativePath, "\0") || in_array('..', $segments, true)) {
             http_response_code(403);
             echo 'Invalid path';
             exit;
         }
 
         $realRoot = realpath(ASSETS_PATH) ?: ASSETS_PATH;
-        $fullPath = $realRoot . DIRECTORY_SEPARATOR . $relativePath;
+        $fullPath = realpath($realRoot . DIRECTORY_SEPARATOR . $relativePath);
 
-        if (!is_file($fullPath)) {
+        // Resolved file must stay inside the assets root (also blocks symlink escapes)
+        if ($fullPath === false
+            || !str_starts_with($fullPath, $realRoot . DIRECTORY_SEPARATOR)
+            || !is_file($fullPath)
+        ) {
             http_response_code(404);
             echo 'File not found';
             exit;
